@@ -1,0 +1,19 @@
+# Dependencies
+node_modules/
+
+# Env and build
+.env
+dist
+cache
+artifacts
+typechain-types
+coverage
+coverage.json
+out
+broadcast
+
+# Foundry lib (run: cd contract && forge install foundry-rs/forge-std)
+contract/lib
+
+*.log
+.DS_Store
