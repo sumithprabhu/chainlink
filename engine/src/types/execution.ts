@@ -1,4 +1,4 @@
-import type { WorkflowConfig } from "./workflow.js";
+import type { WorkflowConfig } from "./workflow";
 
 /**
  * Result of running a module (auction or voting).
@@ -9,10 +9,20 @@ export interface ModuleResult {
 }
 
 /**
+ * Payload from WorkflowCreated (with block/tx info for confirmations and creator).
+ */
+export interface WorkflowEventPayload {
+  workflowId: bigint;
+  blockNumber: number;
+  transactionHash: string;
+}
+
+/**
  * Input passed to the execution orchestrator for a single workflow run.
  */
 export interface ExecutionInput {
   workflowId: bigint;
+  transactionHash: string;
 }
 
 /**

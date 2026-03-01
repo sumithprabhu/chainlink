@@ -58,6 +58,28 @@ export class BlockchainAdapter {
     return this.contract;
   }
 
+  getProvider(): JsonRpcProvider {
+    return this.provider;
+  }
+
+  /** Wait until chain has at least blockNumber + confirmations. */
+  async waitForConfirmations(blockNumber: number, confirmations: number): Promise<void> {
+    const target = blockNumber + confirmations;
+    while (true) {
+      const current = await this.provider.getBlockNumber();
+      if (current >= target) return;
+      this.logger.debug({ current, target }, "Waiting for confirmations");
+      await new Promise((r) => setTimeout(r, 2000));
+    }
+  }
+
+  /** Get creator (from) of the transaction that emitted WorkflowCreated. */
+  async getTransactionCreator(txHash: string): Promise<string> {
+    const tx = await this.provider.getTransaction(txHash);
+    if (!tx?.from) throw new Error(`Transaction not found or no from: ${txHash}`);
+    return tx.from.toLowerCase();
+  }
+
   async getWorkflowConfig(workflowId: bigint): Promise<WorkflowConfig> {
     const raw = await this.contract.getWorkflowConfig(workflowId);
     return toWorkflowConfig(raw);
@@ -74,6 +96,21 @@ export class BlockchainAdapter {
       executionIndex
     );
     return { commitmentHash, finalized };
+  }
+
+  async estimateGasFinalizeExecution(
+    workflowId: bigint,
+    commitmentHash: string,
+    attestationProof: string,
+    nonce: bigint
+  ): Promise<bigint> {
+    return this.contract.finalizeExecution.estimateGas(
+      workflowId,
+      commitmentHash,
+      attestationProof,
+      nonce,
+      { value: 0n }
+    );
   }
 
   async finalizeExecution(
@@ -96,7 +133,7 @@ export class BlockchainAdapter {
     return tx;
   }
 
-  async waitForTransaction(tx: ContractTransactionResponse): Promise<void> {
-    await tx.wait();
+  async waitForTransaction(tx: ContractTransactionResponse, confirmations?: number): Promise<void> {
+    await tx.wait(confirmations ?? undefined);
   }
 }

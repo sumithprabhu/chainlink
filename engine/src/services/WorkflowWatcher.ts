@@ -1,64 +1,125 @@
 import type { Logger } from "pino";
 import type { BlockchainAdapter } from "../adapters/BlockchainAdapter";
 import type { ExecutionService } from "./ExecutionService";
+import type { WorkflowEventPayload } from "../types/execution";
+
+const CIRCUIT_BREAKER_THRESHOLD = 5;
+const POLL_INTERVAL_MS = 2000;
 
 export interface WorkflowWatcherConfig {
   blockchain: BlockchainAdapter;
   execution: ExecutionService;
+  minConfirmations: number;
   logger: Logger;
 }
 
 /**
- * Subscribes to WorkflowCreated and enqueues workflowId for sequential processing.
- * No business logic; orchestration only. One-at-a-time execution to avoid concurrency issues.
+ * Polls for WorkflowCreated, waits for block confirmations, then enqueues.
+ * Sequential processing with circuit breaker on consecutive failures.
  */
 export class WorkflowWatcher {
   private readonly blockchain: BlockchainAdapter;
   private readonly execution: ExecutionService;
+  private readonly minConfirmations: number;
   private readonly logger: Logger;
-  private readonly queue: bigint[] = [];
+  private readonly queue: WorkflowEventPayload[] = [];
   private processing = false;
+  private consecutiveFailures = 0;
+  private circuitOpen = false;
+  private lastProcessedBlock = -1;
 
   constructor(config: WorkflowWatcherConfig) {
     this.blockchain = config.blockchain;
     this.execution = config.execution;
+    this.minConfirmations = config.minConfirmations;
     this.logger = config.logger.child({ component: "WorkflowWatcher" });
   }
 
   start(): void {
-    const contract = this.blockchain.getContract();
-    contract.on(
-      "WorkflowCreated",
-      (
-        workflowId: bigint,
-        _approvedWorkflowHash: string,
-        _moduleType: number,
-        _settlementMode: number
-      ) => {
-        this.logger.info({ workflowId: workflowId.toString() }, "WorkflowCreated received");
-        this.enqueue(workflowId);
-      }
+    this.poll();
+    this.logger.info(
+      { minConfirmations: this.minConfirmations },
+      "Listening for WorkflowCreated (polling with confirmation safety)"
     );
-    this.logger.info("Listening for WorkflowCreated events");
   }
 
-  private enqueue(workflowId: bigint): void {
-    this.queue.push(workflowId);
+  private async poll(): Promise<void> {
+    if (this.circuitOpen) return;
+    try {
+      const provider = this.blockchain.getProvider();
+      if (this.lastProcessedBlock < 0) {
+        this.lastProcessedBlock = await provider.getBlockNumber();
+      }
+      const contract = this.blockchain.getContract();
+      const fromBlock = this.lastProcessedBlock + 1;
+      const toBlock = "latest";
+      const events = await contract.queryFilter(
+        contract.getEvent("WorkflowCreated"),
+        fromBlock,
+        toBlock
+      );
+      for (const event of events) {
+        const blockNumber = event.blockNumber;
+        const workflowId = event.args[0] as bigint;
+        this.logger.info(
+          { workflowId: workflowId.toString(), blockNumber, txHash: event.log.transactionHash },
+          "WorkflowCreated received"
+        );
+        await this.blockchain.waitForConfirmations(blockNumber, this.minConfirmations);
+        this.enqueue({
+          workflowId,
+          blockNumber,
+          transactionHash: event.log.transactionHash,
+        });
+        this.lastProcessedBlock = Math.max(this.lastProcessedBlock, blockNumber);
+      }
+      if (events.length > 0) {
+        this.lastProcessedBlock = events.reduce(
+          (max, e) => Math.max(max, e.blockNumber),
+          this.lastProcessedBlock
+        );
+      }
+    } catch (err) {
+      this.logger.warn({ err }, "Poll error");
+    }
+    setTimeout(() => this.poll(), POLL_INTERVAL_MS);
+  }
+
+  private enqueue(payload: WorkflowEventPayload): void {
+    if (this.circuitOpen) {
+      this.logger.warn({ workflowId: payload.workflowId.toString() }, "Circuit open; not enqueueing");
+      return;
+    }
+    this.queue.push(payload);
     this.processNext();
   }
 
   private processNext(): void {
-    if (this.processing || this.queue.length === 0) return;
+    if (this.circuitOpen || this.processing || this.queue.length === 0) return;
     this.processing = true;
-    const workflowId = this.queue.shift()!;
+    const payload = this.queue.shift()!;
     this.execution
-      .run(workflowId)
+      .run(payload.workflowId, payload.transactionHash)
+      .then(() => {
+        this.consecutiveFailures = 0;
+      })
       .catch((err) => {
-        this.logger.error({ err, workflowId: workflowId.toString() }, "Execution error");
+        this.logger.error(
+          { err, workflowId: payload.workflowId.toString() },
+          "Execution error"
+        );
+        this.consecutiveFailures += 1;
+        if (this.consecutiveFailures >= CIRCUIT_BREAKER_THRESHOLD) {
+          this.circuitOpen = true;
+          this.logger.fatal(
+            { consecutiveFailures: this.consecutiveFailures },
+            "Circuit breaker open; stopping processing. Manual restart required."
+          );
+        }
       })
       .finally(() => {
         this.processing = false;
-        if (this.queue.length > 0) this.processNext();
+        if (!this.circuitOpen && this.queue.length > 0) this.processNext();
       });
   }
 }
