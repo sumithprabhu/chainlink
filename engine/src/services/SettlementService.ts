@@ -2,7 +2,8 @@ import type { Logger } from "pino";
 import { SettlementMode } from "../types/workflow";
 
 /**
- * Settlement branching only. No real settlement implementation yet.
+ * Settlement Layer: branching and logging only. All settlement-mode logic must remain here.
+ * ExecutionService only passes through workflowId and settlementMode from contract config.
  */
 export class SettlementService {
   private readonly logger: Logger;

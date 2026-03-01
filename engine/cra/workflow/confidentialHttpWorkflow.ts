@@ -1,5 +1,10 @@
+/**
+ * This module represents the Confidential Compute Layer.
+ * Secrets must be provided via SecretProvider. No plaintext data should exit this layer in production.
+ */
 import { createCipheriv, randomBytes } from "crypto";
 import type { CraConfig } from "../config/craConfig";
+import type { SecretProvider } from "../secretProvider/SecretProvider";
 
 export interface ConfidentialWorkflowInput {
   workflowId: string;
@@ -14,23 +19,25 @@ export interface ConfidentialWorkflowOutput {
 
 /**
  * Chainlink CRA-style confidential HTTP workflow:
- * - Resolve API key (from Vault DON / reserved key; here simulated via env).
+ * - Resolve API key and AES key via SecretProvider (Env or Vault DON).
  * - POST to private endpoint with workflowId and inputHash.
- * - Encrypt JSON response with AES-GCM.
+ * - Encrypt JSON response with AES-GCM (12-byte random nonce).
  * - Return encrypted payload (no decryption in engine).
+ *
+ * Determinism: Confidential HTTP result is inherently non-deterministic (random nonce).
+ * Idempotency is enforced by skipping execution when workflow already has a finalized
+ * record, not by output reproducibility.
  */
 export async function runConfidentialHttpWorkflow(
   config: CraConfig,
+  secretProvider: SecretProvider,
   input: ConfidentialWorkflowInput
 ): Promise<ConfidentialWorkflowOutput> {
-  const apiKey =
-    process.env.ENGINE_API_KEY ??
-    (process.env[config.API_KEY_SECRET_NAME] as string | undefined);
-  const aesKeyHex =
-    process.env.ENGINE_AES_ENCRYPTION_KEY ??
-    (process.env[config.AES_ENCRYPTION_KEY_SECRET_NAME] as string | undefined);
-  if (!apiKey || !aesKeyHex) {
-    throw new Error("Missing API key or AES key (set ENGINE_API_KEY / ENGINE_AES_ENCRYPTION_KEY for local)");
+  const apiKey = await secretProvider.getSecret(config.API_KEY_SECRET_NAME);
+  const aesKeyHex = await secretProvider.getSecret(config.AES_ENCRYPTION_KEY_SECRET_NAME);
+  const key = Buffer.from(aesKeyHex, "hex");
+  if (key.length !== 32) {
+    throw new Error("AES key must be 32 bytes (64 hex chars)");
   }
 
   const url = `${config.CRA_WORKFLOW_URL.replace(/\/$/, "")}/private-score`;
@@ -53,8 +60,6 @@ export async function runConfidentialHttpWorkflow(
     score: mockResponse.score ?? 0,
     result: mockResponse.result ?? "mock",
   });
-  const key = Buffer.from(aesKeyHex, "hex");
-  if (key.length !== 32) throw new Error("AES key must be 32 bytes (64 hex chars)");
   const nonce = randomBytes(12);
   const cipher = createCipheriv("aes-256-gcm", key, nonce);
   const encrypted = Buffer.concat([cipher.update(plaintext, "utf8"), cipher.final()]);

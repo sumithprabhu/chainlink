@@ -1,3 +1,7 @@
+/**
+ * This adapter represents the Onchain Interaction Layer.
+ * It must remain stateless and not contain business logic.
+ */
 import {
   JsonRpcProvider,
   Wallet,
@@ -120,7 +124,7 @@ export class BlockchainAdapter {
     nonce: bigint
   ): Promise<ContractTransactionResponse> {
     this.logger.info(
-      { workflowId: workflowId.toString(), nonce: nonce.toString() },
+      { workflowId: workflowId.toString(), status: "SUBMITTING_TX" },
       "Calling finalizeExecution"
     );
     const tx = await this.contract.finalizeExecution(

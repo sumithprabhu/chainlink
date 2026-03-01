@@ -24,10 +24,7 @@ export class AttestationService {
       ["bytes32", "bytes32", "uint256"],
       [workflowHash, commitmentHash, nonce]
     );
-    this.logger.debug(
-      { workflowHash: workflowHash.slice(0, 18) + "..", nonce: nonce.toString() },
-      "Generated attestation proof"
-    );
+    this.logger.debug({ status: "BUILDING_ATTESTATION" }, "Generated attestation proof");
     return proof;
   }
 
@@ -39,7 +36,7 @@ export class AttestationService {
     try {
       const bytes = getBytes(proof);
       if (bytes.length !== PROOF_LENGTH_BYTES) {
-        this.logger.warn({ length: bytes.length, expected: PROOF_LENGTH_BYTES }, "Invalid proof length");
+        this.logger.warn({ status: "BUILDING_ATTESTATION" }, "Invalid proof length");
         return false;
       }
       return true;

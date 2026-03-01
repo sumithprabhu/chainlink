@@ -1,6 +1,7 @@
 import pino from "pino";
 import { env } from "./config/env";
 import { loadCraConfig } from "../cra/config/craConfig";
+import { EnvSecretProvider } from "../cra/secretProvider/EnvSecretProvider";
 import { BlockchainAdapter } from "./adapters/BlockchainAdapter";
 import { AttestationService } from "./services/AttestationService";
 import { SettlementService } from "./services/SettlementService";
@@ -34,11 +35,16 @@ function main(): void {
   const attestation = new AttestationService(logger);
   const settlement = new SettlementService(logger);
   const craConfig = loadCraConfig();
+  const secretProvider = new EnvSecretProvider({
+    [craConfig.API_KEY_SECRET_NAME]: "ENGINE_API_KEY",
+    [craConfig.AES_ENCRYPTION_KEY_SECRET_NAME]: "ENGINE_AES_ENCRYPTION_KEY",
+  });
   const execution = new ExecutionService({
     blockchain,
     attestation,
     settlement,
     craConfig,
+    secretProvider,
     creatorAllowlist: env.WORKFLOW_CREATOR_ALLOWLIST,
     executionTimeoutMs: env.EXECUTION_TIMEOUT_MS,
     maxRetries: env.MAX_RETRIES,
