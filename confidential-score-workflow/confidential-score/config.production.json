@@ -1,0 +1,5 @@
+{
+  "apiKeySecretName": "apiKey",
+  "aesEncryptionKeySecretName": "san_marino_aes_gcm_encryption_key",
+  "authorizedPublicKey": "0x0000000000000000000000000000000000000000"
+}

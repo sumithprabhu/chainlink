@@ -19,11 +19,19 @@ contract ConfidentialExecutionEngineTest is Test {
         return abi.encodePacked(workflowHash, commitment, nonce);
     }
 
+    /// @dev Legacy auction config (startTime == 0 = no restrictions).
+    function _legacyAuctionConfig() internal pure returns (ConfidentialExecutionEngine.AuctionConfig memory) {
+        return ConfidentialExecutionEngine.AuctionConfig(0, 0, 0, 0, 0, false, 0, 0);
+    }
+
+    uint256 constant CREATION_DEPOSIT = 0.001 ether;
+
     function setUp() public {
         owner = address(this);
         user1 = makeAddr("user1");
         user2 = makeAddr("user2");
-        engine = new ConfidentialExecutionEngine();
+        engine = new ConfidentialExecutionEngine(address(this), address(this));
+        vm.deal(address(this), 100 ether);
     }
 
     // -------------------------------------------------------------------------
@@ -38,18 +46,22 @@ contract ConfidentialExecutionEngineTest is Test {
             ConfidentialExecutionEngine.ModuleType.SEALED_BID_AUCTION,
             ConfidentialExecutionEngine.SettlementMode.ESCROW
         );
-        engine.createWorkflow(
+        engine.createWorkflow{value: CREATION_DEPOSIT}(
             APPROVED_HASH,
             ConfidentialExecutionEngine.ModuleType.SEALED_BID_AUCTION,
-            ConfidentialExecutionEngine.SettlementMode.ESCROW
+            ConfidentialExecutionEngine.SettlementMode.ESCROW,
+            0,
+            _legacyAuctionConfig()
         );
     }
 
     function test_CreateWorkflow_StoresConfig() public {
-        engine.createWorkflow(
+        engine.createWorkflow{value: CREATION_DEPOSIT}(
             APPROVED_HASH,
             ConfidentialExecutionEngine.ModuleType.PRIVATE_VOTING,
-            ConfidentialExecutionEngine.SettlementMode.PRIVATE_SETTLEMENT
+            ConfidentialExecutionEngine.SettlementMode.PRIVATE_SETTLEMENT,
+            0,
+            _legacyAuctionConfig()
         );
         ConfidentialExecutionEngine.WorkflowConfig memory config = engine.getWorkflowConfig(1);
         assertEq(config.approvedWorkflowHash, APPROVED_HASH);
@@ -66,16 +78,20 @@ contract ConfidentialExecutionEngineTest is Test {
 
     function test_CreateWorkflow_IncrementsWorkflowId() public {
         assertEq(engine.nextWorkflowId(), 1);
-        engine.createWorkflow(
+        engine.createWorkflow{value: CREATION_DEPOSIT}(
             APPROVED_HASH,
             ConfidentialExecutionEngine.ModuleType.SEALED_BID_AUCTION,
-            ConfidentialExecutionEngine.SettlementMode.ESCROW
+            ConfidentialExecutionEngine.SettlementMode.ESCROW,
+            0,
+            _legacyAuctionConfig()
         );
         assertEq(engine.nextWorkflowId(), 2);
-        engine.createWorkflow(
+        engine.createWorkflow{value: CREATION_DEPOSIT}(
             keccak256("other"),
             ConfidentialExecutionEngine.ModuleType.PRIVATE_VOTING,
-            ConfidentialExecutionEngine.SettlementMode.ESCROW
+            ConfidentialExecutionEngine.SettlementMode.ESCROW,
+            0,
+            _legacyAuctionConfig()
         );
         assertEq(engine.nextWorkflowId(), 3);
     }
@@ -85,10 +101,12 @@ contract ConfidentialExecutionEngineTest is Test {
     // -------------------------------------------------------------------------
 
     function test_SettlementMode_ESCROW_Stored() public {
-        engine.createWorkflow(
+        engine.createWorkflow{value: CREATION_DEPOSIT}(
             APPROVED_HASH,
             ConfidentialExecutionEngine.ModuleType.SEALED_BID_AUCTION,
-            ConfidentialExecutionEngine.SettlementMode.ESCROW
+            ConfidentialExecutionEngine.SettlementMode.ESCROW,
+            0,
+            _legacyAuctionConfig()
         );
         ConfidentialExecutionEngine.WorkflowConfig memory config = engine.getWorkflowConfig(1);
         assertEq(
@@ -98,10 +116,12 @@ contract ConfidentialExecutionEngineTest is Test {
     }
 
     function test_SettlementMode_PRIVATE_SETTLEMENT_Stored() public {
-        engine.createWorkflow(
+        engine.createWorkflow{value: CREATION_DEPOSIT}(
             APPROVED_HASH,
             ConfidentialExecutionEngine.ModuleType.PRIVATE_VOTING,
-            ConfidentialExecutionEngine.SettlementMode.PRIVATE_SETTLEMENT
+            ConfidentialExecutionEngine.SettlementMode.PRIVATE_SETTLEMENT,
+            0,
+            _legacyAuctionConfig()
         );
         ConfidentialExecutionEngine.WorkflowConfig memory config = engine.getWorkflowConfig(1);
         assertEq(
@@ -115,10 +135,12 @@ contract ConfidentialExecutionEngineTest is Test {
     // -------------------------------------------------------------------------
 
     function test_FinalizeExecution_StoresCommitmentHashOnly() public {
-        engine.createWorkflow(
+        engine.createWorkflow{value: CREATION_DEPOSIT}(
             APPROVED_HASH,
             ConfidentialExecutionEngine.ModuleType.SEALED_BID_AUCTION,
-            ConfidentialExecutionEngine.SettlementMode.ESCROW
+            ConfidentialExecutionEngine.SettlementMode.ESCROW,
+            0,
+            _legacyAuctionConfig()
         );
         engine.finalizeExecution(1, COMMITMENT, _stubAttestation(APPROVED_HASH, COMMITMENT, 0), 0);
         ConfidentialExecutionEngine.ExecutionRecord memory record =
@@ -128,10 +150,12 @@ contract ConfidentialExecutionEngineTest is Test {
     }
 
     function test_FinalizeExecution_EmitsExecutionFinalized() public {
-        engine.createWorkflow(
+        engine.createWorkflow{value: CREATION_DEPOSIT}(
             APPROVED_HASH,
             ConfidentialExecutionEngine.ModuleType.SEALED_BID_AUCTION,
-            ConfidentialExecutionEngine.SettlementMode.ESCROW
+            ConfidentialExecutionEngine.SettlementMode.ESCROW,
+            0,
+            _legacyAuctionConfig()
         );
         vm.expectEmit(true, true, true, true);
         emit ConfidentialExecutionEngine.ExecutionFinalized(1, 0, COMMITMENT);
@@ -139,10 +163,12 @@ contract ConfidentialExecutionEngineTest is Test {
     }
 
     function test_FinalizeExecution_IncrementsExecutionCount() public {
-        engine.createWorkflow(
+        engine.createWorkflow{value: CREATION_DEPOSIT}(
             APPROVED_HASH,
             ConfidentialExecutionEngine.ModuleType.SEALED_BID_AUCTION,
-            ConfidentialExecutionEngine.SettlementMode.ESCROW
+            ConfidentialExecutionEngine.SettlementMode.ESCROW,
+            0,
+            _legacyAuctionConfig()
         );
         assertEq(engine.getExecutionCount(1), 0);
         engine.finalizeExecution(1, COMMITMENT, _stubAttestation(APPROVED_HASH, COMMITMENT, 0), 0);
@@ -156,10 +182,12 @@ contract ConfidentialExecutionEngineTest is Test {
     // -------------------------------------------------------------------------
 
     function test_ReplayProtection_RejectsReusedNonce() public {
-        engine.createWorkflow(
+        engine.createWorkflow{value: CREATION_DEPOSIT}(
             APPROVED_HASH,
             ConfidentialExecutionEngine.ModuleType.SEALED_BID_AUCTION,
-            ConfidentialExecutionEngine.SettlementMode.ESCROW
+            ConfidentialExecutionEngine.SettlementMode.ESCROW,
+            0,
+            _legacyAuctionConfig()
         );
         engine.finalizeExecution(1, COMMITMENT, _stubAttestation(APPROVED_HASH, COMMITMENT, 42), 42);
         vm.expectRevert(
@@ -173,10 +201,12 @@ contract ConfidentialExecutionEngineTest is Test {
     }
 
     function test_ReplayProtection_DifferentNoncesSucceed() public {
-        engine.createWorkflow(
+        engine.createWorkflow{value: CREATION_DEPOSIT}(
             APPROVED_HASH,
             ConfidentialExecutionEngine.ModuleType.SEALED_BID_AUCTION,
-            ConfidentialExecutionEngine.SettlementMode.ESCROW
+            ConfidentialExecutionEngine.SettlementMode.ESCROW,
+            0,
+            _legacyAuctionConfig()
         );
         engine.finalizeExecution(1, COMMITMENT, _stubAttestation(APPROVED_HASH, COMMITMENT, 0), 0);
         engine.finalizeExecution(1, keccak256("c2"), _stubAttestation(APPROVED_HASH, keccak256("c2"), 1), 1);
@@ -185,10 +215,12 @@ contract ConfidentialExecutionEngineTest is Test {
     }
 
     function test_ReplayProtection_EmptyAttestationReverts() public {
-        engine.createWorkflow(
+        engine.createWorkflow{value: CREATION_DEPOSIT}(
             APPROVED_HASH,
             ConfidentialExecutionEngine.ModuleType.SEALED_BID_AUCTION,
-            ConfidentialExecutionEngine.SettlementMode.ESCROW
+            ConfidentialExecutionEngine.SettlementMode.ESCROW,
+            0,
+            _legacyAuctionConfig()
         );
         vm.expectRevert(ConfidentialExecutionEngine.InvalidAttestation.selector);
         engine.finalizeExecution(1, COMMITMENT, "", 0); // empty proof
@@ -196,10 +228,12 @@ contract ConfidentialExecutionEngineTest is Test {
 
     /// @dev Same proof cannot be used with different nonce (nonce is bound in attestation).
     function test_ReplayProtection_ProofBoundNonce_DifferentNonceReverts() public {
-        engine.createWorkflow(
+        engine.createWorkflow{value: CREATION_DEPOSIT}(
             APPROVED_HASH,
             ConfidentialExecutionEngine.ModuleType.SEALED_BID_AUCTION,
-            ConfidentialExecutionEngine.SettlementMode.ESCROW
+            ConfidentialExecutionEngine.SettlementMode.ESCROW,
+            0,
+            _legacyAuctionConfig()
         );
         bytes memory proofForNonce0 = _stubAttestation(APPROVED_HASH, COMMITMENT, 0);
         engine.finalizeExecution(1, COMMITMENT, proofForNonce0, 0);
@@ -211,15 +245,19 @@ contract ConfidentialExecutionEngineTest is Test {
     function test_FinalizeWithWrongWorkflowHashFails() public {
         bytes32 hash1 = keccak256("workflow-1");
         bytes32 hash2 = keccak256("workflow-2");
-        engine.createWorkflow(
+        engine.createWorkflow{value: CREATION_DEPOSIT}(
             hash1,
             ConfidentialExecutionEngine.ModuleType.SEALED_BID_AUCTION,
-            ConfidentialExecutionEngine.SettlementMode.ESCROW
+            ConfidentialExecutionEngine.SettlementMode.ESCROW,
+            0,
+            _legacyAuctionConfig()
         );
-        engine.createWorkflow(
+        engine.createWorkflow{value: CREATION_DEPOSIT}(
             hash2,
             ConfidentialExecutionEngine.ModuleType.PRIVATE_VOTING,
-            ConfidentialExecutionEngine.SettlementMode.ESCROW
+            ConfidentialExecutionEngine.SettlementMode.ESCROW,
+            0,
+            _legacyAuctionConfig()
         );
         bytes memory proofForWorkflow1 = _stubAttestation(hash1, COMMITMENT, 0);
         vm.expectRevert(ConfidentialExecutionEngine.InvalidAttestation.selector);
@@ -227,20 +265,24 @@ contract ConfidentialExecutionEngineTest is Test {
     }
 
     function test_EscrowMode_RejectsValue() public {
-        engine.createWorkflow(
+        engine.createWorkflow{value: CREATION_DEPOSIT}(
             APPROVED_HASH,
             ConfidentialExecutionEngine.ModuleType.SEALED_BID_AUCTION,
-            ConfidentialExecutionEngine.SettlementMode.ESCROW
+            ConfidentialExecutionEngine.SettlementMode.ESCROW,
+            0,
+            _legacyAuctionConfig()
         );
         vm.expectRevert(ConfidentialExecutionEngine.EscrowNoValue.selector);
         engine.finalizeExecution{value: 1 ether}(1, COMMITMENT, _stubAttestation(APPROVED_HASH, COMMITMENT, 0), 0);
     }
 
     function test_EmitsCommitmentVerified() public {
-        engine.createWorkflow(
+        engine.createWorkflow{value: CREATION_DEPOSIT}(
             APPROVED_HASH,
             ConfidentialExecutionEngine.ModuleType.SEALED_BID_AUCTION,
-            ConfidentialExecutionEngine.SettlementMode.ESCROW
+            ConfidentialExecutionEngine.SettlementMode.ESCROW,
+            0,
+            _legacyAuctionConfig()
         );
         vm.expectEmit(true, true, true, true);
         emit ConfidentialExecutionEngine.CommitmentVerified(1, COMMITMENT);
@@ -252,10 +294,12 @@ contract ConfidentialExecutionEngineTest is Test {
     // -------------------------------------------------------------------------
 
     function test_OnlyActiveWorkflow_RevertsWhenDeactivated() public {
-        engine.createWorkflow(
+        engine.createWorkflow{value: CREATION_DEPOSIT}(
             APPROVED_HASH,
             ConfidentialExecutionEngine.ModuleType.SEALED_BID_AUCTION,
-            ConfidentialExecutionEngine.SettlementMode.ESCROW
+            ConfidentialExecutionEngine.SettlementMode.ESCROW,
+            0,
+            _legacyAuctionConfig()
         );
         engine.deactivateWorkflow(1);
         vm.expectRevert(

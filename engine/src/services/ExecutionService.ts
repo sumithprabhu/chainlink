@@ -24,12 +24,19 @@ export enum ExecutionStatus {
   FAILED = "FAILED",
 }
 
+export type RunConfidentialWorkflow = (input: {
+  workflowId: string;
+  inputHash: string;
+}) => Promise<{ encryptedData: string; nonce: string; tag: string }>;
+
 export interface ExecutionServiceConfig {
   blockchain: BlockchainAdapter;
   attestation: AttestationService;
   settlement: SettlementService;
   craConfig: CraConfig;
   secretProvider: SecretProvider;
+  /** When set (USE_REAL_CRA), used instead of mock; secrets must not be read from env in this path. */
+  runCra?: RunConfidentialWorkflow;
   creatorAllowlist: string[];
   executionTimeoutMs: number;
   maxRetries: number;
@@ -53,6 +60,7 @@ export class ExecutionService {
   private readonly settlement: SettlementService;
   private readonly craConfig: CraConfig;
   private readonly secretProvider: SecretProvider;
+  private readonly runCra: RunConfidentialWorkflow | undefined;
   private readonly creatorAllowlist: string[];
   private readonly executionTimeoutMs: number;
   private readonly maxRetries: number;
@@ -65,6 +73,7 @@ export class ExecutionService {
     this.settlement = config.settlement;
     this.craConfig = config.craConfig;
     this.secretProvider = config.secretProvider;
+    this.runCra = config.runCra;
     this.creatorAllowlist = config.creatorAllowlist;
     this.executionTimeoutMs = config.executionTimeoutMs;
     this.maxRetries = config.maxRetries;
@@ -118,13 +127,17 @@ export class ExecutionService {
       const inputHash = keccak256(
         toUtf8Bytes(`${workflowId.toString()}-${config.approvedWorkflowHash}`)
       );
+      const runModule = this.runCra
+        ? () => this.runCra!({ workflowId: workflowId.toString(), inputHash })
+        : () =>
+            runConfidentialHttpWorkflow(this.craConfig, this.secretProvider, {
+              workflowId: workflowId.toString(),
+              inputHash,
+            });
       let encrypted: { encryptedData: string; nonce: string; tag: string };
       try {
         encrypted = await Promise.race([
-          runConfidentialHttpWorkflow(this.craConfig, this.secretProvider, {
-            workflowId: workflowId.toString(),
-            inputHash,
-          }),
+          runModule(),
           timeout(this.executionTimeoutMs),
         ]);
       } catch (timeoutErr) {

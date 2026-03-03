@@ -6,8 +6,9 @@ async function main() {
   console.log("Deploying with account:", deployer.address);
   console.log("Account balance:", ethers.formatEther(balance), "ETH");
 
+  const protocolFeeRecipient = process.env.PROTOCOL_FEE_RECIPIENT ?? deployer.address;
   const Engine = await ethers.getContractFactory("ConfidentialExecutionEngine");
-  const engine = await Engine.deploy();
+  const engine = await Engine.deploy(deployer.address, protocolFeeRecipient);
   await engine.waitForDeployment();
   const address = await engine.getAddress();
   console.log("ConfidentialExecutionEngine deployed to:", address);

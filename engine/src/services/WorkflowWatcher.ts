@@ -60,16 +60,21 @@ export class WorkflowWatcher {
       );
       for (const event of events) {
         const blockNumber = event.blockNumber;
-        const workflowId = event.args[0] as bigint;
+        const workflowId = (event as { args: unknown[] }).args[0] as bigint;
+        const txHash = (event as { transactionHash?: string }).transactionHash;
+        if (!txHash) {
+          this.logger.warn({ workflowId: (workflowId as bigint).toString() }, "WorkflowCreated event missing transactionHash; skipping");
+          continue;
+        }
         this.logger.info(
-          { workflowId: workflowId.toString(), blockNumber, txHash: event.log.transactionHash },
+          { workflowId: workflowId.toString(), blockNumber, txHash },
           "WorkflowCreated received"
         );
         await this.blockchain.waitForConfirmations(blockNumber, this.minConfirmations);
         this.enqueue({
           workflowId,
           blockNumber,
-          transactionHash: event.log.transactionHash,
+          transactionHash: txHash,
         });
         this.lastProcessedBlock = Math.max(this.lastProcessedBlock, blockNumber);
       }

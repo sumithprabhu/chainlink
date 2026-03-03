@@ -9,8 +9,9 @@ async function main() {
   console.log("Network: Ethereum mainnet, chainId:", network.chainId);
 
   const [deployer] = await ethers.getSigners();
+  const protocolFeeRecipient = process.env.PROTOCOL_FEE_RECIPIENT ?? deployer.address;
   const Engine = await ethers.getContractFactory("ConfidentialExecutionEngine");
-  const engine = await Engine.deploy();
+  const engine = await Engine.deploy(deployer.address, protocolFeeRecipient);
   await engine.waitForDeployment();
   console.log("ConfidentialExecutionEngine:", await engine.getAddress());
 }

@@ -49,16 +49,19 @@ export async function runConfidentialHttpWorkflow(
       "X-API-Key": apiKey,
     },
     body: JSON.stringify(body),
-  }).catch(() => null);
+  });
 
-  const mockResponse =
-    res?.ok && res?.headers.get("content-type")?.includes("json")
-      ? await res.json()
-      : { score: 0, result: "mock" };
-
+  if (!res.ok) {
+    throw new Error(`CRA HTTP ${res.status}: ${res.statusText}`);
+  }
+  const contentType = res.headers.get("content-type");
+  if (!contentType?.includes("json")) {
+    throw new Error("CRA response is not JSON");
+  }
+  const json = await res.json();
   const plaintext = JSON.stringify({
-    score: mockResponse.score ?? 0,
-    result: mockResponse.result ?? "mock",
+    score: (json as { score?: number }).score ?? 0,
+    result: (json as { result?: string }).result ?? "ok",
   });
   const nonce = randomBytes(12);
   const cipher = createCipheriv("aes-256-gcm", key, nonce);

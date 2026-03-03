@@ -12,6 +12,14 @@ export class SettlementService {
     this.logger = logger.child({ service: "SettlementService" });
   }
 
+  /** Stub: contract may not have releaseEscrow yet. Call after finalizeExecution for ESCROW mode. */
+  releaseEscrowStub(workflowId: bigint, winnerAddress: string): void {
+    this.logger.info(
+      { workflowId: workflowId.toString(), winnerAddress },
+      "releaseEscrow stub (contract not yet supports releaseEscrow)"
+    );
+  }
+
   handleSettlementMode(workflowId: bigint, settlementMode: number): void {
     if (settlementMode === SettlementMode.ESCROW) {
       this.logger.info(

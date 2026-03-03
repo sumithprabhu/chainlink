@@ -1,0 +1,4 @@
+{
+  "apiKeySecretName": "apiKey",
+  "aesEncryptionKeySecretName": "san_marino_aes_gcm_encryption_key"
+}
