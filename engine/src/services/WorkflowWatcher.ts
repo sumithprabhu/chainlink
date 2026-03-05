@@ -5,6 +5,8 @@ import type { WorkflowEventPayload } from "../types/execution";
 
 const CIRCUIT_BREAKER_THRESHOLD = 5;
 const POLL_INTERVAL_MS = 2000;
+/** Max block range per eth_getLogs (Alchemy Free tier allows 10). */
+const MAX_LOG_BLOCK_RANGE = 10;
 
 export interface WorkflowWatcherConfig {
   blockchain: BlockchainAdapter;
@@ -50,9 +52,18 @@ export class WorkflowWatcher {
       if (this.lastProcessedBlock < 0) {
         this.lastProcessedBlock = await provider.getBlockNumber();
       }
+      const currentBlock = await provider.getBlockNumber();
       const contract = this.blockchain.getContract();
       const fromBlock = this.lastProcessedBlock + 1;
-      const toBlock = "latest";
+      // Cap range to satisfy RPC limits (e.g. Alchemy Free: 10 blocks max for eth_getLogs)
+      const toBlock = Math.min(
+        fromBlock + MAX_LOG_BLOCK_RANGE - 1,
+        currentBlock
+      );
+      if (fromBlock > toBlock) {
+        setTimeout(() => this.poll(), POLL_INTERVAL_MS);
+        return;
+      }
       const events = await contract.queryFilter(
         contract.getEvent("WorkflowCreated"),
         fromBlock,
@@ -83,6 +94,8 @@ export class WorkflowWatcher {
           (max, e) => Math.max(max, e.blockNumber),
           this.lastProcessedBlock
         );
+      } else {
+        this.lastProcessedBlock = toBlock;
       }
     } catch (err) {
       this.logger.warn({ err }, "Poll error");

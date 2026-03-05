@@ -1,0 +1,33 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --background: #0B0D17;
+  --foreground: #FFFFFF;
+  --card: #121525;
+  --primary: #375BD2;
+  --primary-hover: #4a6ae8;
+  --muted: #AAB3C5;
+  --success: #00D395;
+  --error: #FF4D4F;
+}
+
+body {
+  color: var(--foreground);
+  background: var(--background);
+  font-feature-settings: "rlig" 1, "calt" 1;
+}
+
+/* Subtle grid overlay */
+.grid-pattern {
+  background-image: linear-gradient(rgba(55, 91, 210, 0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(55, 91, 210, 0.03) 1px, transparent 1px);
+  background-size: 48px 48px;
+}
+
+@layer utilities {
+  .text-balance {
+    text-wrap: balance;
+  }
+}

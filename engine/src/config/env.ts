@@ -19,7 +19,7 @@ const envSchema = z.object({
     )
     .pipe(z.array(z.string().regex(/^0x[a-fa-f0-9]{40}$/))),
   EXECUTION_TIMEOUT_MS: z.coerce.number().int().min(1000).max(120_000).default(15_000),
-  API_PORT: z.coerce.number().int().min(1).max(65535).default(3000),
+  API_PORT: z.coerce.number().int().min(1).max(65535).default(8080),
 });
 
 export type Env = z.infer<typeof envSchema>;
